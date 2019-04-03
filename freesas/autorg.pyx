@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #cython: boundscheck=False, wraparound=False, cdivision=True, embedsignature=True
-# 
+#
 #    Project: freesas
 #             https://github.com/kif/freesas
 #
@@ -53,11 +53,11 @@ from collections import namedtuple
 RG_RESULT = namedtuple("RG_RESULT", ["Rg", "sigma_Rg", "I0", "sigma_I0", "start_point", "end_point", "quality", "aggregated"])
 
 cimport numpy as cnumpy
-import numpy as numpy 
+import numpy as numpy
 from math import exp
 from libc.math cimport sqrt, log, fabs
 from libc.stdlib cimport malloc, free
-from .isnan cimport isfinite 
+from .isnan cimport isfinite
 from cython cimport floating
 import logging
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ DTYPE = numpy.float64
 ctypedef cnumpy.float64_t DTYPE_t
 
 # Definition of a few constants
-cdef: 
+cdef:
     DTYPE_t[::1] WEIGHTS
     int RATIO_INTENSITY = 10  # start with range from Imax -> Imax/10
 
@@ -78,15 +78,15 @@ i0_frac_err_weight = 1.0
 r_sqr_weight = 1000
 reduced_chi_sqr_weight = 0.0
 window_size_weight = 6.0
-    
-_weights = numpy.array([qmaxrg_weight, qminrg_weight, rg_frac_err_weight, 
-                        i0_frac_err_weight, r_sqr_weight, reduced_chi_sqr_weight, 
+
+_weights = numpy.array([qmaxrg_weight, qminrg_weight, rg_frac_err_weight,
+                        i0_frac_err_weight, r_sqr_weight, reduced_chi_sqr_weight,
                         window_size_weight])
 WEIGHTS = numpy.ascontiguousarray(_weights / _weights.sum(), DTYPE)
 
 
-def currate_data(floating[:, :] data, 
-                 DTYPE_t[::1] q, 
+def currate_data(floating[:, :] data,
+                 DTYPE_t[::1] q,
                  DTYPE_t[::1] intensity,
                  DTYPE_t[::1] sigma,
                  DTYPE_t[::1] q2,
@@ -95,38 +95,38 @@ def currate_data(floating[:, :] data,
                  int[::1] offsets,
                  int[::1] data_range):
     """Clean up the input (data, 2D array of q, i, sigma)
-    
-    It removed negatives q, intensity, sigmas and also NaNs and infinites
-    q, intensity and sigma are ouput array. 
-    
-    we need also x: q*q, y: log I and w: (err/i)**(-2) 
 
-    
+    It removed negatives q, intensity, sigmas and also NaNs and infinites
+    q, intensity and sigma are ouput array.
+
+    we need also x: q*q, y: log I and w: (err/i)**(-2)
+
+
     :param data: input data, array of q,i,sigma of size N
     :param q: output array, to be filled with valid values
     :param intensity: output array, to be filled with valid values
     :param sigma: output array, to be filled with valid values
-    :param offsets: output array, provide the index in the input array for an 
+    :param offsets: output array, provide the index in the input array for an
                    index in the output array
     :return: the number of valid points in the array n <=N
     """
     cdef:
         int idx_in, idx_out, size_in, size_out, start, end, idx
         DTYPE_t one_q, one_i, one_sigma, i_max, i_thres, tmp
-        
+
     size_in = data.shape[0]
-    
+
     # it may work with more then 3 col and discard subsequent columns
-    # assert data.shape[1] == 3, "data has 3 columns" 
+    # assert data.shape[1] == 3, "data has 3 columns"
     assert q.size >= size_in, "size of q_array is valid"
     assert intensity.size >= size_in, "size of intensity array is valid"
     assert sigma.size >= size_in, "size of sigma array is valid"
     assert q2.size >= size_in, "size of q2 array is valid"
     assert log_intensity.size >= size_in, "size of log_intensity array is valid"
-    assert weights.size >= size_in, "size of weights array is valid" 
+    assert weights.size >= size_in, "size of weights array is valid"
     assert offsets.size >= size_in, "size of offsets array is valid"
     assert data_range.size >= 3, "data range holds enough space"
-    
+
     # For safety: memset the arrays
     q[:] = 0.0
     intensity[:] = 0.0
@@ -135,8 +135,8 @@ def currate_data(floating[:, :] data,
     log_intensity[:] = 0.0
     weights[:] = 0.0
     offsets[:] = 0
-    data_range[:] = 0 
-    start = 0  
+    data_range[:] = 0
+    start = 0
     idx_out = 0
     i_max = 0.0
     i_max1 = 0.0
@@ -156,22 +156,22 @@ def currate_data(floating[:, :] data,
                 i_max = one_i
                 start = idx_out
             idx_out += 1
-            
+
     # Second pass: focus on the valid region and prepare the 3 other arrays
-    
+
     end = idx_out
     if end > start + 2:
         i_thres = (i_max + data[start + 1, 1] + data[start + 2, 1]) / (3 * RATIO_INTENSITY)
     else:
         i_thres = i_max / (RATIO_INTENSITY)
-    
+
     for idx in range(start, idx_out):
-        one_i = intensity[idx] 
+        one_i = intensity[idx]
         if one_i < i_thres:
             end = idx
             break
         else:
-            # populate the arrays for the fitting  
+            # populate the arrays for the fitting
             one_q = q[idx]
             q2[idx] = one_q * one_q
             log_intensity[idx] = log(one_i)
@@ -179,14 +179,14 @@ def currate_data(floating[:, :] data,
             one_sigma = sigma[idx]
             tmp = one_i / one_sigma
             weights[idx] = tmp * tmp
-        
-    data_range[0] = start        
-    data_range[1] = end
-    data_range[2] = idx_out   
-             
 
-cdef DTYPE_t weighted_linear_fit(DTYPE_t[::1] datax, DTYPE_t[::1] datay, DTYPE_t[::1] weight, 
-                                 int data_start, int data_end, 
+    data_range[0] = start
+    data_range[1] = end
+    data_range[2] = idx_out
+
+
+cdef DTYPE_t weighted_linear_fit(DTYPE_t[::1] datax, DTYPE_t[::1] datay, DTYPE_t[::1] weight,
+                                 int data_start, int data_end,
                                  DTYPE_t[:, ::1] fit_mv, int position) nogil:
     """Calculates a fit to intercept-slope*x, weighted by w. s
         Input:
@@ -194,17 +194,17 @@ cdef DTYPE_t weighted_linear_fit(DTYPE_t[::1] datax, DTYPE_t[::1] datay, DTYPE_t
         w: The weight fot the individual points in x,y. Typically w would be 1/yerr**2.
         data_start and data_end: start and end for this fit
         Returns results: intercept, sigma_intercept, slope, sigma_slope
-                        in the array fit_mv at the given position 
+                        in the array fit_mv at the given position
     """
-    cdef: 
+    cdef:
         int i, size
         DTYPE_t one_y, one_x, one_xy, one_xx, one_w, sigma_uxx, sigma_uxy, sigma_uyy
         DTYPE_t sigma_wy, sigma_wx, sigma_wxx, sigma_wxy, sigma_w, sigma_ux, sigma_uy
         DTYPE_t intercept, slope, xmean, ymean, ssxx, ssxy, ssyy, s, sigma_intercept, sigma_slope, xmean2
         DTYPE_t detA, reduced_chi_sqr
 
-    intercept = slope = xmean = ymean = ssxx = ssyy = ssxy = s = sigma_intercept = sigma_slope = 0.0 
-    sigma_uxx = sigma_wy = sigma_wx = sigma_wxy = sigma_wxx = xmean2 = sigma_w = 0.0 
+    intercept = slope = xmean = ymean = ssxx = ssyy = ssxy = s = sigma_intercept = sigma_slope = 0.0
+    sigma_uxx = sigma_wy = sigma_wx = sigma_wxy = sigma_wxx = xmean2 = sigma_w = 0.0
     sigma_uyy = sigma_uy = sigma_ux = sigma_uxy = 0.0
 
 # There should be a python function performing the sanitization
@@ -227,7 +227,7 @@ cdef DTYPE_t weighted_linear_fit(DTYPE_t[::1] datax, DTYPE_t[::1] datay, DTYPE_t
         sigma_uy += one_y
         sigma_ux += one_x
         sigma_uyy += one_y * one_y
-    
+
     detA = sigma_wx * sigma_wx - sigma_w * sigma_wxx
 
     if fabs(detA) > 1e-100:
@@ -260,13 +260,13 @@ def linFit(x,y,w):
         Returns results: tuple (intercept,slope)
     """
     cdef:
-        DTYPE_t quality, intercept, slope, sigma_slope, lower, upper, r_sqr  
-        DTYPE_t[::1] datax, datay, weight 
+        DTYPE_t quality, intercept, slope, sigma_slope, lower, upper, r_sqr
+        DTYPE_t[::1] datax, datay, weight
         int data_start, data_end, position, size
         DTYPE_t[:, ::1] fit_mv
-        
+
     size = len(x)
-    
+
     datax= numpy.empty(size, dtype=DTYPE)
     datay= numpy.empty(size, dtype=DTYPE)
     weight= numpy.empty(size, dtype=DTYPE)
@@ -275,20 +275,20 @@ def linFit(x,y,w):
         datax[i] = x[i]
         datay[i] = y[i]
         weight[i] = w[i]
-        
-    intercept = weighted_linear_fit(datax, datay, weight, 0, 15, fit_mv, 0)   
-     
-    return (fit_mv[0,6], fit_mv[0,4])    
+
+    intercept = weighted_linear_fit(datax, datay, weight, 0, 15, fit_mv, 0)
+
+    return (fit_mv[0,6], fit_mv[0,4])
 
 cdef DTYPE_t calc_chi(DTYPE_t[::1] x, DTYPE_t[::1]y, DTYPE_t[::1] w,
                       int start, int end, DTYPE_t offset, DTYPE_t slope,
                       DTYPE_t[:, ::1] fit_mv, int position) nogil:
     """Calculate the r_sqr, chi_sqr and reduced_chi_sqr to be saved in fit_data"""
-    cdef: 
+    cdef:
         int idx, size
         DTYPE_t value, sum_n, sum_y, sum_d, one_y, r_sqr, mean_y, value2
         DTYPE_t reduced_chi_sqr, chi_sqr
-    
+
     size = end - start
 # This sanitization should be performed at the Python-level
 #     if size > 2:
@@ -311,7 +311,7 @@ cdef DTYPE_t calc_chi(DTYPE_t[::1] x, DTYPE_t[::1]y, DTYPE_t[::1] w,
         sum_y += one_y
         chi_sqr += value2 * w[idx]
     mean_y = sum_y / size
-    
+
     for idx in range(start, end):
         one_y = y[idx]
         value = one_y - mean_y
@@ -319,11 +319,11 @@ cdef DTYPE_t calc_chi(DTYPE_t[::1] x, DTYPE_t[::1]y, DTYPE_t[::1] w,
 
     r_sqr = 1.0 - sum_n / sum_d
     #r_sqr = 1 - diff2.sum()/((y-y.mean())*(y-y.mean())).sum()
-    
+
     #if r_sqr > .15:
     #    chi_sqr = (diff2*yw).sum()
     reduced_chi_sqr = chi_sqr / (size - 2)
-    
+
     fit_mv[position, 10] = r_sqr
     fit_mv[position, 11] = chi_sqr
     fit_mv[position, 12] = reduced_chi_sqr
@@ -340,16 +340,16 @@ def autoRg(sasm):
         DTYPE_t quality, intercept, slope, sigma_slope, lower, upper, r_sqr
         bint aggregated = 0
         cnumpy.ndarray qualities
-        DTYPE_t[::1] q_ary, i_ary, sigma_ary, lgi_ary, q2_ary, wg_ary, 
+        DTYPE_t[::1] q_ary, i_ary, sigma_ary, lgi_ary, q2_ary, wg_ary,
         DTYPE_t[::1] fit_data
         int[::1] offsets, data_range
         int raw_size, currated_size, data_start, data_end, data_step
-        int min_window, max_window, window_size, window_step 
+        int min_window, max_window, window_size, window_step
         int start, end, nb_fit, array_size, block_size=39 #page of 4k
         int idx_min, idx_max, idx
         DTYPE_t[:, ::1] fit_mv, tmp_mv
         cnumpy.ndarray[DTYPE_t, ndim=2] fit_array
-        
+
     raw_size = len(sasm)
     q_ary = numpy.empty(raw_size, dtype=DTYPE)
     i_ary = numpy.empty(raw_size, dtype=DTYPE)
@@ -359,21 +359,21 @@ def autoRg(sasm):
     wg_ary = numpy.empty(raw_size, dtype=DTYPE)
     offsets = numpy.empty(raw_size, dtype=numpy.int32)
     data_range = numpy.zeros(3, dtype=numpy.int32)
-    
+
     currate_data(sasm, q_ary, i_ary, sigma_ary, q2_ary, lgi_ary, wg_ary, offsets, data_range)
-    
+
     data_start, data_end, currated_size = data_range
-    
+
     logger.debug("raw size: %s, currated size: %s start: %s end: %s", raw_size, currated_size, data_start, data_end)
-   
+
     if (data_end - data_start) < 10:
         raise InsufficientDataError()
-  
+
     # Pick a minimum fitting window size. 10 is consistent with atsas autorg.
     min_window = 10
     max_window = data_end - data_start
 
-    # It is very time consuming to search every possible window size and every 
+    # It is very time consuming to search every possible window size and every
     # possible starting point.
     # Here we define a subset to search.
     window_step = max_window // 10
@@ -387,8 +387,8 @@ def autoRg(sasm):
     array_size = block_size
     nb_fit = 0
     fit_mv = numpy.zeros((array_size, 13), dtype=DTYPE)
-    # This function takes every window size in the window list, stepts it through 
-    # the data range, and fits it to get the RG and I0. If basic conditions are 
+    # This function takes every window size in the window list, stepts it through
+    # the data range, and fits it to get the RG and I0. If basic conditions are
     # met, qmin*RG<1 and qmax*RG<1.35, and RG>0.1,
     # We keep the fit.
     with nogil:
@@ -399,7 +399,7 @@ def autoRg(sasm):
                 end = start + window_size
                 #logger.debug("Fitting: %s , %s ", start,end)
                 fit_mv[nb_fit, 0] = start
-                fit_mv[nb_fit, 1] = window_size 
+                fit_mv[nb_fit, 1] = window_size
                 fit_mv[nb_fit, 2] = q_ary[start]
                 fit_mv[nb_fit, 3] = q_ary[end - 1]
 
@@ -409,21 +409,21 @@ def autoRg(sasm):
                     with gil:
                         logger.error("Null determiant")
                         continue
-    
-                slope = fit_mv[nb_fit, 4] 
-                sigma_slope = fit_mv[nb_fit, 5] 
+
+                slope = fit_mv[nb_fit, 4]
+                sigma_slope = fit_mv[nb_fit, 5]
 
                 lower = q2_ary[start] * slope
                 upper = q2_ary[start + window_size - 1] * slope
 
-                fit_mv[nb_fit, 8] = lower 
+                fit_mv[nb_fit, 8] = lower
                 fit_mv[nb_fit, 9] = upper
-                
+
                 # check the validity of the model with some physics
                 # i. e qmin*RG<1 and qmax*RG<1.35, and RG>0.1,
                 if (slope > 3e-5) and (lower < 0.33) and (upper < 0.6075) \
                         and (sigma_slope / slope <= 1):
-                    r_sqr = calc_chi(q2_ary, lgi_ary, wg_ary, start, end, 
+                    r_sqr = calc_chi(q2_ary, lgi_ary, wg_ary, start, end,
                                      intercept, slope, fit_mv, nb_fit)
                     if r_sqr > .15:
                         nb_fit += 1
@@ -440,14 +440,14 @@ def autoRg(sasm):
                 else:
                     for idx in range(13):
                         fit_mv[nb_fit, idx] = 0.0
-    
+
 
     logger.debug("Number of valid fits: %s ", nb_fit)
-                    
+
     if nb_fit == 0:
         #Extreme cases: may need to relax the parameters.
         pass
-    
+
     if nb_fit > 0:
         fit_array = numpy.asarray(fit_mv)[:nb_fit, :]
 
@@ -458,13 +458,13 @@ def autoRg(sasm):
         qminrg_score = 1.0 - fit_array[:, 8]
         rg_frac_err_score = 1.0 - fit_array[:, 5]/fit_array[:, 4]
         i0_frac_err_score = 1.0 - fit_array[:, 7]/fit_array[:, 6]
-        r_sqr_score = fit_array[:, 10]**4
+        r_sqr_score = exp(fit_array[:, 10])#**4
         reduced_chi_sqr_score = 1.0 / fit_array[:,12] #Not right
-        window_size_score = fit_array[:, 1] / max_window #float dividion forced by fit_array dtype 
+        window_size_score = fit_array[:, 1] / max_window #float dividion forced by fit_array dtype
         scores = numpy.array([qmaxrg_score, qminrg_score, rg_frac_err_score, i0_frac_err_score, r_sqr_score,
                               reduced_chi_sqr_score, window_size_score])
         qualities = numpy.dot(WEIGHTS, scores)
-       
+
         #I have picked an aribtrary threshold here. Not sure if 0.6 is a good qualities cutoff or not.
         if qualities.max() > 0:# 0.5:
             # idx = qualities.argmax()
@@ -487,7 +487,7 @@ def autoRg(sasm):
             try:
                 idx = qualities.argmax()
                 #rg = fit_array[:,4][qualities>qualities[idx]-.1].mean()
-                
+
                 rg = sqrt(3. * fit_array[idx, 4])
                 dber = fit_array[:, 5][qualities > qualities[idx] - .1].std()
                 rger = 0.5 * sqrt(3. / rg) * dber
@@ -500,7 +500,7 @@ def autoRg(sasm):
                 idx_min_corr = numpy.argmin(numpy.absolute(sasm[:, 0] - fit_array[idx, 3]))
                 idx_max_corr = numpy.argmin(numpy.absolute(sasm[:, 0] - fit_array[idx, 4]))
             except:
-                
+
                 idx = qualities.argmax()
                 rg = sqrt(3. * fit_array[idx, 4])
                 rger = 0.5 * sqrt(3. / rg) * fit_array[idx, 5]
@@ -510,7 +510,7 @@ def autoRg(sasm):
                 idx_max = int(fit_array[idx, 0] + fit_array[idx, 1] - 1.0)
             quality = qualities[idx]
         else:
-          
+
             rg = -1
             rger = -1
             i0 = -1
@@ -520,7 +520,7 @@ def autoRg(sasm):
             quality = 0
 
     else:
-       
+
         rg = -1
         rger = -1
         i0 = -1
